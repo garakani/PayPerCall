@@ -10,8 +10,12 @@ cache_add_blk() {
 		printf("Out of memory...\n");
 	}
 	ptr->is_authorized = FALSE;
+	ptr->label = 0;
+	strcpy(ptr->invoice, "");
 	strcpy(ptr->authCode, "");
-	strcpy(ptr->authCodeWithBolt11, "");
+	strcpy(ptr->serverPublicKey, "");
+	strcpy(ptr->clientPublicKey, "");
+	strcpy(ptr->statusAuthCodeServerPublicKeyBolt11, "");
 	return ptr;
 }
 

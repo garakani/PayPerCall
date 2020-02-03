@@ -7,14 +7,17 @@
 #include "proj.h"
 
 void
-cl_authorize(t_ctl_block *blk) {  // ###MKG write this
+cl_authorize(t_ctl_block *blk) {  // ###MKG write this generate plain(8) + random (16) cypher
+	blk->is_authorized = TRUE;
+	strcpy(blk->authCode, "000000000000000000000000");
 }
 
 void
 cl_deauthorize(t_ctl_block *blk) {
 	blk->is_authorized = FALSE;
 	strcpy(blk->authCode, "");
-	strcpy(blk->authCodeWithBolt11, "");
+	strcpy(blk->statusAuthCodeServerPublicKeyBolt11, "");
+	// ###MKG put the block in the pool to be deallocated
 }
 
 bool_t
@@ -22,16 +25,68 @@ cl_is_authorized(t_ctl_block *blk) {
 	return blk->is_authorized;
 }
 
+void
+addToken(char *s, char *token) {
+	if (s == NULL)
+		exit(1);
+	strcat(s, ":");
+	strcat(s, token);
+	return;
+}
+
 char *
-cl_parse_invoice(t_ctl_block *blk, char *out) {
+getToken(char *s, int index, char *token) {
+	int i, length, first, last, numTokens = 1, nextToken = 1;
+
+
+	// invalid input string
+	if (s == NULL || strlen(s) == 0 || strlen(s) > (MAX_LINE-1))
+		return NULL;
+
+	strcpy(token, s);
+
+	// count and chop tokens
+	length = strlen(s);
+	for (i=0; i < length; i++) {
+		if (token[i] == ':') {
+			numTokens++;
+			token[i] = '\0';
+		}
+	}
+
+	// invalid index
+	if (index < 1 || index > numTokens)
+		return NULL;
+
+	else if (index == 1)
+		return token;
+
+	// find and return token
+	else {
+		for (i=0; i < length; i++) {
+			if (token[i] == '\0') {
+				nextToken++;
+				if (nextToken == index) {
+					return token+i+1;
+				}
+			}
+		}
+	}
+
+	return NULL;
+}
+
+char *
+cl_parse_invoice(t_ctl_block *blk) {
 	json_error_t error;
 	json_t *bolt11;
-	json_t *root = json_loads(out, 0, &error);
+	json_t *root = json_loads(blk->invoice, 0, &error);
 	char b11[MAX_LINE];
+	char line[MAX_LINE];
 
 	*b11 = '\0';
         if (!root) {
-		printf("Error loading JSON invoice: %s\n", out);
+		printf("Error loading JSON invoice: %s\n", blk->invoice);
 		cl_deauthorize(blk);
 	}
 	else {
@@ -41,44 +96,37 @@ cl_parse_invoice(t_ctl_block *blk, char *out) {
 		}
 		else {
 			strcat(b11, json_string_value(bolt11));
-			printf("bolt11 is: %s\n", b11);
 		}
 	}
 
-	// Generate expanded bolt11 that includes authorization code preamble
-	if (cl_is_authorized(blk)) {
-		strcpy(blk->authCodeWithBolt11, blk->authCode);
-		strcat(blk->authCodeWithBolt11, b11);
-	}
-
-	free(out);	//###MKG fix this
 	json_decref(root);
 
-        printf("[4]::RPC: Sending bolt11_invoice to client for call ID %d\n", blk->label);
-	return blk->authCodeWithBolt11;
+	// Construct return parameters for client
+	if (cl_is_authorized(blk)) {
+		strcpy(blk->statusAuthCodeServerPublicKeyBolt11, INVOICE_SUCCESS_CODE);
+		addToken(blk->statusAuthCodeServerPublicKeyBolt11, blk->authCode);
+                if (exec_command("cat ~/.ppc/id_ppc.pub" , blk->serverPublicKey)
+				|| strlen(blk->serverPublicKey) == 0) {
+			printf("Could not find the server public key (PEM file): ~/PPC/id_ppc.pub\n");
+			printf("----- returning fail code to client\n");
+			return INVOICE_FAIL_CODE;
+		}
+		addToken(blk->statusAuthCodeServerPublicKeyBolt11, blk->serverPublicKey);
+		addToken(blk->statusAuthCodeServerPublicKeyBolt11, b11);
+        	printf("[4]::RPC: Sending bolt11_invoice to client for label %d\n", 
+				blk->label);
+		printf("%s\n", blk->statusAuthCodeServerPublicKeyBolt11);
+		return blk->statusAuthCodeServerPublicKeyBolt11;
+	}
+	else
+		return INVOICE_FAIL_CODE;
 }
 
-char *
-cl_make_invoice(t_ctl_block *blk, int msatoshi, char *description) {
+int
+exec_command(char *cmd_string, char *out) {
 	FILE *pipe;
-
-	char cmd_string[MAX_LINE];
-
-	char *out = (char *) calloc(MAX_BUF, sizeof(char));
-	if (out == NULL) {
-		printf("Out of memory...\n");
-		exit(1);
-	}
-	out[0] = '\0';
-
-	printf("[2]::RPC: Received client request to generate invoice\n");
-	(void) sprintf(cmd_string, "lightning-cli invoice %d %d %s", 
-			msatoshi, blk->label, description); 
-	printf("Generating invoice of %d msatoshi for call ID %d for %s\n",
-			msatoshi, blk->label, description);
-	printf("[3]:Lightning_API: %s\n", cmd_string);
 	pipe = popen(cmd_string, "r");
-	if (pipe != NULL) {    // ###MKG clean this up. put in new subroutine
+	if (pipe != NULL) {
 		while (1) {
 			char *line;
       			char buf[MAX_LINE];
@@ -89,15 +137,33 @@ cl_make_invoice(t_ctl_block *blk, int msatoshi, char *description) {
 				strcat(out, line);
 		}
     		pclose(pipe);
+		return 0;
 	}
 	else
-		printf("cl_make_invoice(): Pipe failed to open\n");
+		return 1;
+}
 
-	printf("Full invoice is %s\n", out);
+char *
+cl_make_invoice(t_ctl_block *blk, int msatoshi, char *description) {
+	char cmd_string[MAX_LINE];
+
+	blk->invoice[0] = '\0';
+
+	printf("[2]::RPC: Received client request to generate invoice\n");
+	(void) sprintf(cmd_string, "lightning-cli invoice %d %d %s", 
+			msatoshi, blk->label, description); 
+	printf("Generating invoice of %d msatoshi for label %d for %s\n",
+			msatoshi, blk->label, description);
+	printf("[3]:Lightning_API: %s\n", cmd_string);
+
+	if (exec_command(cmd_string, blk->invoice))
+		return INVOICE_FAIL_CODE;
+
+	printf("Full invoice is %s\n", blk->invoice);
 
 	cl_authorize(blk);
 
-	return cl_parse_invoice(blk, out);  // ###MKG client must dealh with "" retval
+	return cl_parse_invoice(blk);  // ###MKG client must dealh with "" retval
 }
 
 void

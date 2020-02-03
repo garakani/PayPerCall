@@ -1,4 +1,4 @@
-typedef string str_t<512>;
+typedef string str_t<1024>;
 
 struct t_string {
 	str_t data;

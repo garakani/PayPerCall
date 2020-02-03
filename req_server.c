@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <jansson.h>
 #include <time.h>
+#include <math.h>
 #include "req.h"
 #include "proj.h"
 
@@ -14,11 +15,24 @@ make_rand_label(t_ctl_block *blk) {
 	return;
 }
 
+float 
+calc_fee(char *serviceType, int quantity) {
+	float fee = FEE * (float) sqrt((double) quantity);
+	return fee;       // simple fee formula for DEMO code
+}
+
 t_string *
 req_receipt_1_svc(t_string *argp, struct svc_req *rqstp)
 {
 	static t_string result;
 	t_ctl_block *blk;
+	char quantity[MAX_TOKEN];
+	char serviceType[MAX_LINE];
+	char description[MAX_LINE] = {'\0'};
+	float fee;
+
+	fee = calc_fee(getToken(argp->data, 1, serviceType), 
+		  atoi(getToken(argp->data, 2, quantity)));
 
 	blk = cache_add_blk();
 	if (blk == NULL) {
@@ -26,13 +40,13 @@ req_receipt_1_svc(t_string *argp, struct svc_req *rqstp)
 		return &emptyResult;
 	}
 	else {
-
 		make_rand_label(blk);
-
-		// ### Description must be based on service_id, etc. in argp, not hardcoded
+		strcpy(description, getToken(argp->data, 1, serviceType));
+		addToken(description, getToken(argp->data, 2, quantity));
 		(blk->receiptResult).data = cl_make_invoice(blk, 
-							(float) FEE,
-							"\"payment for RPC call\"");
+							    fee,
+							    description);
+
 		return &(blk->receiptResult);
 	}
 }

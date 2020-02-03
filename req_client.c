@@ -4,8 +4,11 @@
  * as a guideline for developing your own functions.
  */
 
-#include "req.h"
+#include <string.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include "req.h"
+#include "proj.h"
 
 /* prototypes for clightning API */
 void cl_pay_invoice(char *);
@@ -13,10 +16,11 @@ void cl_pay_invoice(char *);
 void
 ppc_request(char *host, char *request) {
 	CLIENT *clnt;
-	t_string  *authorizationLabledinvoice;
+	t_string  *result_1;
 	t_string  req_receipt_1_arg;
 	t_string  *result_2;
 	t_pair  req_1_arg;
+	char status[MAX_TOKEN];
 
 #ifndef	DEBUG
 	clnt = clnt_create (host, REQ_PROG, REQ_VERS, "udp");
@@ -27,47 +31,91 @@ ppc_request(char *host, char *request) {
 #endif	/* DEBUG */
 
 	req_receipt_1_arg.data = request;  /* Added argument */
-	printf("[1]::RPC: Client requesting server to provide invoice for PPC call\n");
+	printf("[1]::RPC: Client requesting server to provide invoice for PPC call: \n%s\n",
+		request);
         sleep(3);
-	authorizationLabledinvoice = req_receipt_1(&req_receipt_1_arg, clnt);
+	result_1 = req_receipt_1(&req_receipt_1_arg, clnt);
 	printf("[5]::RPC: Client received bolt11_invoice from server\n");
-	if (authorizationLabledinvoice == (t_string *) NULL) {
+	if (result_1 == (t_string *) NULL) {
 		clnt_perror (clnt, "call failed");
+		exit (1);
 	}
-/*	else
-	{
-		cl_pay_invoice(invoice->data);
-	}
-	req_1_arg.authorizationLabeldInvoice = invoice->data;  ###MKG Fix THis */
-	req_1_arg.data = request;
-
-	printf("[7]::RPC: Client requesting service from server\n");
-	result_2 = req_1(&req_1_arg, clnt);
-	if (result_2 == (t_string *) NULL) {
-		clnt_perror (clnt, "call failed");
+	else if (strcmp(getToken(result_1->data, 1, status), INVOICE_SUCCESS_CODE)) {
+		printf("Server failed to gererate invoice\n");
+		printf("Client received: %s\n", result_1->data);
+		exit (1);
 	}
 	else
 	{
-		printf("[12]::RPC: Client received result of query: %s\n", result_2->data);
+		printf("Client received: %s\n", result_1->data);
+//		cl_pay_invoice(invoice->data);
 	}
+//	req_1_arg.authorizationLabeldInvoice = invoice->data;  ###MKG Fix THis */
+//	req_1_arg.data = request;
+
+//	printf("[7]::RPC: Client requesting service from server\n");
+//	result_2 = req_1(&req_1_arg, clnt);
+//	if (result_2 == (t_string *) NULL) {
+//		clnt_perror (clnt, "call failed");
+//	}
+//	else
+//	{
+//		printf("[12]::RPC: Client received result of query: %s\n", result_2->data);
+//	}
 
 #ifndef	DEBUG
 	clnt_destroy (clnt);
 #endif	 /* DEBUG */
+
+	exit(0);
 }
 
+int
+isQuantityValid(char *quantity) {
+	int q = atoi(quantity);
+	if (q > 0 && q < MAX_VALID_QUANTITY)
+		return TRUE;
+	else
+		return FALSE;
+}
 
 int
 main (int argc, char *argv[])
-{
-	char *host;
+{	
+	char reqString[MAX_LINE];
+	int quantity = 0;
+	reqString[0] = '\0';
+	char *clientRSAPublicKey;
 
-	if (argc < 2) {
-		printf ("usage: %s server_host\n", argv[0]);
+	// allocate memory to hold client RSA public key
+	clientRSAPublicKey = (char *) calloc(MAX_LINE, sizeof(char));
+	if (clientRSAPublicKey == NULL) {
+		printf("Out of memory...");
+		exit(1);
+	}
+
+	if (argc != 4) {
+		printf ("usage: %s server_ip service_type quantity\n", argv[0]);
 		exit (1);
 	}
-	host = argv[1];
-	printf("Client initialting Pay Per Call (PPC) request\n");
-	ppc_request (host, "Request_String");     /* Pass new param to PPC request */
-	exit (0);
+
+	// check to make sure quantity is valid
+	if (!isQuantityValid(argv[3]))
+		printf("usage: invalid quantity specified: %s\n", argv[3]);
+
+	printf("Client initialting Pay Per Call (PPC) request to %s for %d %s.\n",
+		argv[1], atoi(argv[3]), argv[2]);
+
+	strcpy(reqString, argv[2]);
+	addToken(reqString, argv[3]);
+        if (exec_command("cat ~/.ppc/id_ppc.pub" , clientRSAPublicKey)
+				|| strlen(clientRSAPublicKey) == 0) {
+		printf("Could not find the client public key (PEM file): ~/PPC/id_ppc.pub\n");
+		exit(1);
+	}
+
+	addToken(reqString, clientRSAPublicKey);
+	free(clientRSAPublicKey);
+
+	ppc_request (argv[1], reqString);
 }

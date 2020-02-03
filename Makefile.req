@@ -21,7 +21,7 @@ OBJECTS_SVC = $(SOURCES_SVC.c:%.c=%.o) $(TARGETS_SVC.c:%.c=%.o)
 # Compiler flags 
 
 CFLAGS += -g 
-LDLIBS += -lnsl -ljansson
+LDLIBS += -lnsl -ljansson -lm
 RPCGENFLAGS = 
 
 # Targets 
