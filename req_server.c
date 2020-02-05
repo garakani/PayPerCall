@@ -8,18 +8,28 @@
 static char empty[2];
 static t_string emptyResult;
 
-float 
-calc_fee(char *serviceType, int quantity) {
-	float fee = FEE * (float) sqrt((double) quantity);
-	return fee;       // simple fee structure for DEMO code
-}
-
 bool_t
 is_service_type_valid(char *service_type) { 
 	// List valid service types
 	if (!strcmp(service_type, SERVICE_TYPE_1))  // stock quotes
 		return TRUE;
 	return FALSE;
+}
+
+// Use a simple fee structure for DEMO code
+float 
+calc_fee(char *serviceType, int quantity) {
+	float fee = CALL_FEE * (float) sqrt((double) quantity);
+
+	// No fee if service not supported
+//	if (!is_service_type_valid(serviceType))
+//		return NO_FEE;
+
+	// Make sure a minimum fee is imposed, so lightning payment can find a route
+	if (fee < MIN_BUNDLE_FEE)
+		fee = MIN_BUNDLE_FEE;
+
+	return fee;       
 }
 
 t_string *
@@ -67,7 +77,18 @@ req_1_svc(t_pair *argp, struct svc_req *rqstp)
 
 	printf("[8]::RPC: Server receives request for service\n");
         blk = find_block_from_label("argp->authorization");  //###MKG pass label  as arg
-	cl_wait_for_payment(blk->label);
+	if (blk->state != STATE_PAYMENT_VERIFIED) {
+		blk->state = STATE_WAIT_FOR_PAYMENT;
+		if (cl_wait_for_payment(blk->label) == SUCCESS) {
+			blk->state = STATE_PAYMENT_VERIFIED;
+		}
+		else {
+			blk->state = STATE_PAYMENT_FAILED;
+			strcpy(empty, INVOICE_FAIL_CODE);
+			emptyResult.data = empty; 
+			return &emptyResult;			
+		}
+	}
 
 	result.data = result_text;
 	printf("[11]::RPC: Server sent result of query: %s\n", result_text);

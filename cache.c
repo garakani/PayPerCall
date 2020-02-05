@@ -10,6 +10,7 @@ cache_add_blk() {
 		printf("Out of memory...\n");
 	}
 	ptr->is_authorized = FALSE;
+	ptr->state = STATE_IDLE;
 	ptr->label = 0;
 	strcpy(ptr->invoice, "");
 	(ptr->authCode).noncePlusSequenceNumber = 0;

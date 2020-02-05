@@ -176,7 +176,7 @@ cl_make_invoice(t_ctl_block *blk, int msatoshi, char *description) {
 	return parsedInvoice;
 }
 
-void
+int
 cl_wait_for_payment(uint64_t label) {
 	FILE *pipe;
 	char out[MAX_BUF];
@@ -185,32 +185,21 @@ cl_wait_for_payment(uint64_t label) {
 
 	printf("Calling lightning API to wait for invoice payment for call ID %ld\n", label);
 	(void) sprintf(cmd_string, "lightning-cli waitinvoice %ld", label); 
-	printf("Waiting on payment for call ID %ld\n", label);
+	printf("Waiting on payment for label %ld\n", label);
 	printf("[9]::Lightning_API: %s\n", cmd_string);
-        sleep(3);
-//	pipe = popen("lightning-cli waitinvoice [label]", "r");
-	pipe = popen("", "r");
-	if (pipe != NULL) {
-		while (1) {
-			char *line;
-      			char buf[MAX_LINE];
-      			line = fgets(buf, sizeof buf, pipe);
-      			if (line == NULL)
-				break;
-			else if ((strlen(line) + strlen(out)) < MAX_BUF)
-				strcat(out, line);
-		}
-    		pclose(pipe);
+
+	if (exec_command(cmd_string, out)) {
+		printf("could not verify payment on label %ld\n", label);
+		return FAILED;
 	}
-	else
-		printf("cl_wait_for_payment(): Pipe failed to open\n");
 
 	printf("[10]::Lightning_NOTIFICATION: Payment for label %ld received\n", label);
-	printf("Server done waiting for payment for call ID %ld\n", label);
-	return;
+	printf("%s\n", out);
+	printf("Server done waiting for payment %ld\n", label);
+	return SUCCESS;
 }
 
-void cl_pay_invoice(char *bolt11) {
+int cl_pay_invoice(char *bolt11, char *proofOfPayment) {
 	FILE *pipe;
 	char out[MAX_BUF];
 	char cmd_string[MAX_LINE];
@@ -219,25 +208,13 @@ void cl_pay_invoice(char *bolt11) {
 	printf("Calling lightning API to pay invoice %s\n", bolt11);
 	(void) sprintf(cmd_string, "lightning-cli pay %s", bolt11); 
 	printf("[6]::Lightning_API: %s\n", cmd_string);
-        sleep(3);
-//	pipe = popen("lightning-cli pay <bolt11>", "r");
-	pipe = popen("", "r");
-	if (pipe != NULL) {
-		while (1) {
-			char *line;
-      			char buf[MAX_LINE];
-      			line = fgets(buf, sizeof buf, pipe);
-      			if (line == NULL)
-				break;
-			else if ((strlen(line) + strlen(out)) < MAX_BUF)
-				strcat(out, line);
-		}
-    		pclose(pipe);
-	}
-	else
-		printf("cl_wait_for_payment(): Pipe failed to open\n");
 
-	printf("Client paid invoice %s\n", bolt11);
-	return;
+	if (exec_command(cmd_string, proofOfPayment)) {
+		printf("exec command failed to pay invoice\n");
+		return FAILED;
+	}
+
+	printf("Client paid invoice. Proof of payment:\n %s\n", proofOfPayment);
+	return SUCCESS;
 }
 

@@ -10,9 +10,6 @@
 #include "req.h"
 #include "proj.h"
 
-/* prototypes for clightning API */
-void cl_pay_invoice(char *);
-
 void
 ppc_request(char *host, char *request) {
 	CLIENT *clnt;
@@ -27,6 +24,7 @@ ppc_request(char *host, char *request) {
 	char serverPublicKey[MAX_LINE];
 	char labelString[MAX_TOKEN];
 	char bolt11[MAX_LINE];
+	char proofOfPayment[MAX_LINE];
 	t_auth_code serverAuthToken;
 
 #ifndef	DEBUG
@@ -40,7 +38,6 @@ ppc_request(char *host, char *request) {
 	req_receipt_1_arg.data = request;
 	printf("[1]::RPC: Client requesting server to provide invoice for PPC call: \n%s\n",
 		request);
-        sleep(3);
 	result_1 = req_receipt_1(&req_receipt_1_arg, clnt);
 	if (result_1 == (t_string *) NULL) {
 		clnt_perror (clnt, "call failed");
@@ -109,7 +106,11 @@ ppc_request(char *host, char *request) {
 			exit (1);
 		}
 
-//		cl_pay_invoice(invoice->data);
+		// pay bolt11
+		if (cl_pay_invoice(bolt11, proofOfPayment) == FAILED) {
+			printf("Payment failed for blot11: %s\n", bolt11);
+			exit (1);
+		}
 	}
 // ###MKG client must parse return from 1st RPC and pass it as authorization in 2nd RPC)
 //	req_1_arg.authorizationLabeldInvoice = invoice->data;  ###MKG Fix THis */

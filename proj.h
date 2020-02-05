@@ -4,7 +4,11 @@
 #define MAX_LINE 1024
 #define MAX_BUF 4096
 #define MAX_VALID_QUANTITY 1024*1024*1024
-#define FEE (float) 1000           // milli Satoshi
+#define CALL_FEE (float) 1000           // milli Satoshi
+#define MIN_BUNDLE_FEE (float) 2000     // milli Satoshi
+#define NO_FEE 0
+#define SUCCESS 0
+#define FAILED 1
 #define INVOICE_SUCCESS_CODE "0"
 #define INVOICE_FAIL_CODE  "1"
 #define INVOICE_FAIL_CODE_INVALID_SERVICE_REQ  "2"
@@ -20,6 +24,10 @@
 #define INIT_AUTH_PROPER_MASK_1 0xFFFFFFFF00000000
 #define INIT_AUTH_PROPER_MASK_2 0x00000000FFFFFFFF 
 #define ENCODED_STRING_SIZE 16
+#define STATE_IDLE 0
+#define STATE_WAIT_FOR_PAYMENT 1
+#define STATE_PAYMENT_VERIFIED 2
+#define STATE_PAYMENT_FAILED 3
 
 // List valid service types below
 #define SERVICE_TYPE_1 "quotes"
@@ -32,6 +40,7 @@ typedef struct t_auth_code t_auth_code;
 
 struct t_ctl_block {
 	int is_authorized;
+	int state;
 	char invoice[MAX_LINE];
 //	char authCode[MAX_TOKEN];
 	t_auth_code authCode;
@@ -50,7 +59,8 @@ void addToken(char *, char *);
 char *getToken(char *, int, char *);
 int isQuantityValid(char *);
 char *cl_make_invoice(t_ctl_block *, int, char *);
-void cl_wait_for_payment(uint64_t);
+int cl_pay_invoice(char *, char *);
+int cl_wait_for_payment(uint64_t);
 t_ctl_block *find_block_from_label(char *);
 t_ctl_block *cache_add_blk();
 int exec_command(char *, char *);

@@ -29,6 +29,7 @@ cl_authorize(t_ctl_block *blk) {
 	uint64_t mask = INIT_AUTH_MASK;
 
 	blk->is_authorized = TRUE;
+	blk->state = STATE_IDLE;
 	(blk->authCode).noncePlusSequenceNumber = label & 
 						  mask;
 	(blk->authCode).baseCode = make_rand_label();
@@ -38,6 +39,7 @@ cl_authorize(t_ctl_block *blk) {
 void
 cl_deauthorize(t_ctl_block *blk) {
 	blk->is_authorized = FALSE;
+	blk->state = STATE_IDLE;
 	(blk->authCode).noncePlusSequenceNumber = 0;
 	(blk->authCode).baseCode = 0;
 	strcpy(blk->statusAuthCodeServerPublicKeyBolt11, "");
