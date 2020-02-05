@@ -12,8 +12,8 @@ SOURCES_SVC.c =
 SOURCES_SVC.h = 
 SOURCES.x = req.x
 
-TARGETS_SVC.c = req_svc.c req_server.c req_xdr.c clightning.c cache.c
-TARGETS_CLNT.c = req_clnt.c req_client.c req_xdr.c clightning.c
+TARGETS_SVC.c = req_svc.c req_server.c req_xdr.c clightning.c cache.c authorize.c
+TARGETS_CLNT.c = req_clnt.c req_client.c req_xdr.c clightning.c authorize.c
 TARGETS = req.h req_xdr.c req_clnt.c req_svc.c req_client.c req_server.c clightning.c
 
 OBJECTS_CLNT = $(SOURCES_CLNT.c:%.c=%.o) $(TARGETS_CLNT.c:%.c=%.o)

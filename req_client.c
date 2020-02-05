@@ -21,6 +21,13 @@ ppc_request(char *host, char *request) {
 	t_string  *result_2;
 	t_pair  req_1_arg;
 	char status[MAX_TOKEN];
+	char serverAuthTokenString[MAX_TOKEN];
+	char serverDecryptedAuthTokenString[MAX_TOKEN];
+	char clientPrivateKey[MAX_LINE];
+	char serverPublicKey[MAX_LINE];
+	char labelString[MAX_TOKEN];
+	char bolt11[MAX_LINE];
+	t_auth_code serverAuthToken;
 
 #ifndef	DEBUG
 	clnt = clnt_create (host, REQ_PROG, REQ_VERS, "udp");
@@ -30,26 +37,81 @@ ppc_request(char *host, char *request) {
 	}
 #endif	/* DEBUG */
 
-	req_receipt_1_arg.data = request;  /* Added argument */
+	req_receipt_1_arg.data = request;
 	printf("[1]::RPC: Client requesting server to provide invoice for PPC call: \n%s\n",
 		request);
         sleep(3);
 	result_1 = req_receipt_1(&req_receipt_1_arg, clnt);
-	printf("[5]::RPC: Client received bolt11_invoice from server\n");
 	if (result_1 == (t_string *) NULL) {
 		clnt_perror (clnt, "call failed");
 		exit (1);
 	}
-	else if (strcmp(getToken(result_1->data, 1, status), INVOICE_SUCCESS_CODE)) {
-		printf("Server failed to gererate invoice\n");
-		printf("Client received: %s\n", result_1->data);
+	else if (!strcmp(getToken(result_1->data, 
+			TOKEN_RETURN_ID_STATUS, status), 
+			INVOICE_FAIL_CODE_INVALID_SERVICE_REQ)) {
+		printf("Service not supported by server\n");
+		exit (1);
+	}
+	else if (strcmp(getToken(result_1->data, 
+			TOKEN_RETURN_ID_STATUS, status), 
+			INVOICE_SUCCESS_CODE)) {
+		printf("Server failed to generate invoice\n");
 		exit (1);
 	}
 	else
 	{
+		printf("[5]::RPC: Client received bolt11_invoice from server\n");
 		printf("Client received: %s\n", result_1->data);
+
+		// check if received initial auth token from the server
+		if (getToken(result_1->data, TOKEN_RETURN_ID_AUTH, 
+				serverAuthTokenString) == NULL) {
+			printf("Missing authorization token received from server\n");
+			exit (1);
+		}
+
+		// load private RSA key
+                if (exec_command("cat ~/.ppc/id_ppc" , clientPrivateKey) ||
+				strlen(clientPrivateKey) == 0) {
+			printf("Could not find the client private key: ~/PPC/id_ppc\n");
+			exit (1);
+		}
+
+		// decrypt auth token
+		cl_string_to_auth_code(cl_RSA_decrypt(serverAuthTokenString,
+			serverDecryptedAuthTokenString, clientPrivateKey), 
+			&serverAuthToken);
+
+		// check token format
+		if (!cl_is_server_auth_code_proper_format(&serverAuthToken)) {
+			printf("Invalid format authorization token received from server\n");
+			exit (1);
+		}
+
+		// get label identifying this transaction
+		if (getToken(result_1->data, TOKEN_RETURN_ID_LABEL, 
+						labelString) == NULL) {
+			printf("Missing label from server\n");
+			exit (1);
+		}
+
+		// get server's public RSA key
+		if (getToken(result_1->data, TOKEN_RETURN_ID_KEY, 
+						serverPublicKey) == NULL) {
+			printf("Missing RSA public key from server\n");
+			exit (1);
+		}
+
+		// get bolt11
+		if (getToken(result_1->data, TOKEN_RETURN_ID_BOLT11, 
+						bolt11) == NULL) {
+			printf("Missing bolt11 string from server\n");
+			exit (1);
+		}
+
 //		cl_pay_invoice(invoice->data);
 	}
+// ###MKG client must parse return from 1st RPC and pass it as authorization in 2nd RPC)
 //	req_1_arg.authorizationLabeldInvoice = invoice->data;  ###MKG Fix THis */
 //	req_1_arg.data = request;
 

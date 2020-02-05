@@ -12,7 +12,8 @@ cache_add_blk() {
 	ptr->is_authorized = FALSE;
 	ptr->label = 0;
 	strcpy(ptr->invoice, "");
-	strcpy(ptr->authCode, "");
+	(ptr->authCode).noncePlusSequenceNumber = 0;
+	(ptr->authCode).baseCode = 0;
 	strcpy(ptr->serverPublicKey, "");
 	strcpy(ptr->clientPublicKey, "");
 	strcpy(ptr->statusAuthCodeServerPublicKeyBolt11, "");
@@ -21,6 +22,6 @@ cache_add_blk() {
 
 // ### Modify this code later
 t_ctl_block *
-find_block_from_auth_code(char *authCode) {
+find_block_from_label(char *label) {
 	return base_ptr;
 }
