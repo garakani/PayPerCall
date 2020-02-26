@@ -1,9 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
 #include "proj.h"
 
+// generate a uint64 pseudo-random number using the 32 bit rand()
 uint64_t
 make_rand_label() {
 	static int firstTime = TRUE;
@@ -23,16 +20,23 @@ make_rand_label() {
 	return r1 | r2;
 }
 
+// Make a new authorization code
+void
+cl_make_authorization_code(t_auth_code *authCode) {
+	uint64_t label = make_rand_label();
+	uint64_t mask = INIT_AUTH_MASK;
+	authCode->saltPlusSequenceNumber = label & mask;
+	authCode->baseCode = make_rand_label();
+	return;
+}
+
 void
 cl_authorize(t_ctl_block *blk) {
 	uint64_t label = make_rand_label();
 	uint64_t mask = INIT_AUTH_MASK;
 
 	blk->is_authorized = TRUE;
-	blk->state = STATE_IDLE;
-	(blk->authCode).noncePlusSequenceNumber = label & 
-						  mask;
-	(blk->authCode).baseCode = make_rand_label();
+	blk->state = STATE_AUTHORIZED;
 	return;
 }
 
@@ -40,10 +44,10 @@ void
 cl_deauthorize(t_ctl_block *blk) {
 	blk->is_authorized = FALSE;
 	blk->state = STATE_IDLE;
-	(blk->authCode).noncePlusSequenceNumber = 0;
+	(blk->authCode).saltPlusSequenceNumber = 0;
 	(blk->authCode).baseCode = 0;
-	strcpy(blk->statusAuthCodeServerPublicKeyBolt11, "");
-	// ###MKG put the block in the pool to be deallocated
+	strcpy(blk->statusSessionKeyClientPublicKeyBolt11, "");
+	// ### put the block in the pool to be deallocated
 }
 
 bool_t
@@ -56,7 +60,7 @@ cl_auth_code_to_string(t_auth_code *authCode, char *out) {
 	int i;
 	char s1[MAX_TOKEN], s2[MAX_TOKEN];
 
-	if (sprintf(s1, "%lx", authCode->noncePlusSequenceNumber) > 0) {
+	if (sprintf(s1, "%lx", authCode->saltPlusSequenceNumber) > 0) {
 		for (i = 0; i < ENCODED_STRING_SIZE-strlen(s1); i++) {
 			out[i] = '0';
 		}
@@ -84,31 +88,41 @@ cl_string_to_auth_code(char *hexString, t_auth_code *authCode) {
 
 	authCode->baseCode = strtol(s+16, NULL, 16);
 	s[16]='\0';
-	authCode->noncePlusSequenceNumber = strtol(s, NULL, 16);
+	authCode->saltPlusSequenceNumber = strtol(s, NULL, 16);
 
 	return;
 }
 
-// A validly formatted auth code from server must have 
-// sequence number equal to zero, but randomized 
-// value in nonce
+char *
+cl_session_key_to_string(uint64_t sessionKey, char *out) {
+	sprintf(out, "%lx", sessionKey);
+	return out;
+}
+
+uint64_t
+cl_string_to_session_key(char *hexString) {
+	uint64_t sessionKey;
+	sessionKey = strtol(hexString, NULL, 16);
+	return sessionKey;
+}
+
+uint64_t
+cl_string_to_label(char *hexString) {
+	uint64_t label;
+	label = strtol(hexString, NULL, 16);
+	return label;
+}
+
+
+// A validly formatted auth code from client must have 
+// sequence number initially equal to zero, but randomized 
+// value in salt
 bool_t
-cl_is_server_auth_code_proper_format(t_auth_code *authCode) {
-	return (authCode->noncePlusSequenceNumber &
+cl_is_client_auth_code_proper_format(t_auth_code *authCode) {
+	return (authCode->saltPlusSequenceNumber &
 		INIT_AUTH_PROPER_MASK_1) &&
-		!(authCode->noncePlusSequenceNumber & 
+		!(authCode->saltPlusSequenceNumber & 
 		INIT_AUTH_PROPER_MASK_2); 
 }
 
-char *
-cl_RSA_encrypt(char *in, char *out, char *pemKey) {
-	strcpy(out, in);  // ###MKG fix this later
-	return out;
-}
-
-char *
-cl_RSA_decrypt(char *in, char *out, char *pemKey) {
-	strcpy(out, in);  // ###MKG fix this later
-	return out;
-}
 

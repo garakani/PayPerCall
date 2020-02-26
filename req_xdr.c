@@ -10,7 +10,7 @@ xdr_str_t (XDR *xdrs, str_t *objp)
 {
 	register int32_t *buf;
 
-	 if (!xdr_string (xdrs, objp, 1024))
+	 if (!xdr_string (xdrs, objp, 4096))
 		 return FALSE;
 	return TRUE;
 }
