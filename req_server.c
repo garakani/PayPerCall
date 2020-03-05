@@ -1,10 +1,10 @@
 #include "proj.h"
 
-static char empty[2];
+static char empty[MAX_SMALL_TOKEN];
 static t_string emptyResult;
 
 bool_t
-is_service_type_valid(char *service_type) { 
+isServiceTypeValid(char *service_type) { 
 	// List valid service types
 	if (!strcmp(service_type, SERVICE_TYPE_1))  // stock quotes
 		return TRUE;
@@ -13,7 +13,7 @@ is_service_type_valid(char *service_type) {
 
 // Use a simple fee structure for DEMO code
 float 
-calc_fee(char *serviceType, int quantity) {
+calcFee(char *serviceType, int quantity) {
 	float fee = CALL_FEE * (float) sqrt((double) quantity);
 
 	// Make sure a minimum fee is imposed, so lightning 
@@ -25,10 +25,10 @@ calc_fee(char *serviceType, int quantity) {
 }
 
 char *
-cl_parse_invoice(t_ctl_block *blk) {
+makeInvoice(t_ctl_block *blk, int msatoshi, char *description) {
 	json_error_t error;
 	json_t *bolt11;
-	json_t *root = json_loads(blk->invoice, 0, &error);
+	json_t *root;
 	RSA *clientKey;
 	RSA *serverKeypair;
 	char *base64EncodedEncryptedString;
@@ -39,19 +39,24 @@ cl_parse_invoice(t_ctl_block *blk) {
 	unsigned char hexString[MAX_TOKEN];
 	unsigned char encryptMsg[MAX_LINE];
 	unsigned char clientMsg[MAX_BUF];
-	size_t encrypt_len;
+	size_t encLength;
 	unsigned char *base64Sig;
 	size_t sigLength;
+
+	if (getInvoice(blk, msatoshi, description) == INVOICE_FAIL_CODE)
+		return INVOICE_FAIL_CODE;
+
+	root = json_loads(blk->invoice, 0, &error);
 
 	*b11 = '\0';
         if (!root) {
 		printf("Error loading JSON invoice: %s\n", blk->invoice);
-		cl_deauthorize(blk);
+		deauthorize(blk);
 	}
 	else {
 	        bolt11 = json_object_get((json_t *) root, "bolt11");
 		if (bolt11 == NULL) {
-			cl_deauthorize(blk);
+			deauthorize(blk);
 		}
 		else {
 			strcat(b11, json_string_value(bolt11));
@@ -65,19 +70,19 @@ cl_parse_invoice(t_ctl_block *blk) {
 	pemPublicKeyStringToRsa(clientKey, blk->clientPublicKey);
 
 	// Construct return parameters for client
-	if (cl_is_authorized(blk)) {
+	if (isAuthorized(blk)) {
 		clientMsg[0]='\0';
 		strcpy(clientMsg, INVOICE_SUCCESS_CODE);
 		addToken(clientMsg, 
-				cl_session_key_to_string(blk->sessionKey, 
+				sessionKeyToString(blk->sessionKey, 
 				hexString));
-		addToken(clientMsg, cl_label_to_string(blk->label, hexString));
+		addToken(clientMsg, labelToString(blk->label, hexString));
 		addToken(clientMsg, b11);
 		printf("Cleartext content to client for label %ld:\n%s\n", 
 				blk->label, clientMsg);
 
 		// Encrypt server's response before sending to client
-		if((encrypt_len = RSA_public_encrypt(strlen(clientMsg) + 1, 
+		if((encLength = RSA_public_encrypt(strlen(clientMsg) + 1, 
 					clientMsg, encryptMsg, clientKey, 
 					RSA_PKCS1_OAEP_PADDING)) == -1) {
 			printf("Error encrypting message: FAILED!!!!\n");
@@ -89,7 +94,7 @@ cl_parse_invoice(t_ctl_block *blk) {
 		//         returnCode+sessionKey+bolt11
 		//	2) client's RSA public key (unencrypted)
 		//	3) server's signature
-		Base64Encode(encryptMsg, encrypt_len, 
+		Base64Encode(encryptMsg, encLength, 
 				&base64EncodedEncryptedString);
 		strcpy(clientMsg, base64EncodedEncryptedString);
 		addToken(clientMsg, blk->clientPublicKey);
@@ -122,32 +127,6 @@ cl_parse_invoice(t_ctl_block *blk) {
 	}
 }
 
-char *
-cl_make_invoice(t_ctl_block *blk, int msatoshi, char *description) {
-	char cmd_string[MAX_LINE];
-	char *parsedInvoice;
-
-	blk->invoice[0] = '\0';
-
-	printf("[2]::RPC: Received client request to generate invoice\n");
-	(void) sprintf(cmd_string, "lightning-cli invoice %d %ld %s", 
-			msatoshi, blk->label, description); 
-	printf("Generating invoice of %d msatoshi for label %ld for %s\n",
-			msatoshi, blk->label, description);
-	printf("[3]:Lightning_API: %s\n", cmd_string);
-
-	if (exec_command(cmd_string, blk->invoice)) {
-		printf("exec command failed to generate invoice\n");
-		return INVOICE_FAIL_CODE;
-	}
-
-	printf("Full invoice is %s\n", blk->invoice);
-
-	parsedInvoice = cl_parse_invoice(blk);
-
-	return parsedInvoice;
-}
-
 // This function is invoked from client side (via RPC) to generate bolt11 
 // invoice. It is also used to piggyback exchange security and other 
 // parameters, such as:
@@ -177,6 +156,8 @@ cl_make_invoice(t_ctl_block *blk, int msatoshi, char *description) {
 t_string *
 req_receipt_1_svc(t_string *argp, struct svc_req *rqstp)
 {
+	int error;
+	pthread_t threadId;
 	static t_string result;
 	t_ctl_block *blk;
 	char quantity[MAX_SMALL_TOKEN];
@@ -191,11 +172,12 @@ req_receipt_1_svc(t_string *argp, struct svc_req *rqstp)
 	char *base64EncodedEncryptedString;
 	char encyptedRequest[MAX_BUF];
 	char token[MAX_BUF];
-	size_t encrypt_len;
+	size_t encLength;
 
 	serverKeypair = getRSAKey();
 
-	blk = cache_add_blk();
+	uint64_t label = makeRandLabel();
+	blk = cacheAddBlk(label);
 	if (blk == NULL) {
 		strcpy(empty, INVOICE_FAIL_CODE_ALLOC);
 		emptyResult.data = empty; 
@@ -204,8 +186,8 @@ req_receipt_1_svc(t_string *argp, struct svc_req *rqstp)
 	else {
 		// Decrypt client's request
 		getToken(argp->data, TOKEN_ID_ENC_BUNDLE, token);
-		Base64Decode(token, &buf, &encrypt_len);
-		if (RSA_private_decrypt(encrypt_len, buf, clearString,
+		Base64Decode(token, &buf, &encLength);
+		if (RSA_private_decrypt(encLength, buf, clearString,
                        			serverKeypair, 
 					RSA_PKCS1_OAEP_PADDING) == -1) {
   			printf("Error decrypting message: FAILED!!!\n");
@@ -220,10 +202,10 @@ req_receipt_1_svc(t_string *argp, struct svc_req *rqstp)
 						clearString);
 		}
 		
-		blk->label = make_rand_label();
+		blk->label = label;
 		strcpy(description, getToken(clearString, 
 					TOKEN_ID_SERVICE_TYPE, serviceType));
-		if (!is_service_type_valid(serviceType)) {
+		if (!isServiceTypeValid(serviceType)) {
 			strcpy(empty, INVOICE_FAIL_CODE_INVALID_SERVICE_REQ);
 			emptyResult.data = empty; 
 			return &emptyResult;			
@@ -239,23 +221,33 @@ req_receipt_1_svc(t_string *argp, struct svc_req *rqstp)
 
 		// Get auth code from client
 		getToken(clearString, TOKEN_ID_AUTH_CODE, authCodeString);
-		cl_string_to_auth_code(authCodeString, &(blk->authCode));
+		stringToAuthCode(authCodeString, &(blk->authCode));
 
-		if (!cl_is_client_auth_code_proper_format(&(blk->authCode))) {
+		if (!isClientAuthCodeProperFormat(&(blk->authCode))) {
 			strcpy(empty, INVOICE_FAIL_CODE_AUTH);
 			emptyResult.data = empty; 
 			return &emptyResult;	
 		}
-		cl_authorize(blk);
+		authorize(blk);
 		
 		// Get client's public key
 		getToken(clearString, TOKEN_ID_PUBLIC_KEY, 
 					blk->clientPublicKey);
 
 		// Generate invoice
-		fee = calc_fee(serviceType, atoi(quantity));
-		(blk->receiptResult).data = cl_make_invoice(blk, fee,
+		fee = calcFee(serviceType, atoi(quantity));
+		(blk->receiptResult).data = makeInvoice(blk, fee,
 							    description);
+
+		blk->minSeqAllowed = 1;
+		blk->maxSeqAllowed = atoi(quantity);
+		blk->state = STATE_WAIT_FOR_PAYMENT;
+        	error = pthread_create(&threadId, NULL, waitForPayment, 
+					(void *) blk);
+       	 	if (!error)
+            		printf("\nThread creation successful\n");
+		else
+			printf("\nThread creation failed!\n"); 
 
 		return &(blk->receiptResult);
 	}
@@ -268,27 +260,93 @@ req_receipt_1_svc(t_string *argp, struct svc_req *rqstp)
 // provide up to the "quantity" of service that was requested and paid 
 // for. 
 t_string *
-req_1_svc(t_pair *argp, struct svc_req *rqstp)
+req_1_svc(t_string *argp, struct svc_req *rqstp)
 {
+	int error;
+	RSA *serverKeypair;
+	pthread_t threadId;
 	t_ctl_block *blk;
 	static t_string  result;
+	char token[MAX_TOKEN];
+	char param[MAX_TOKEN];
+	unsigned char *buf;
+	size_t encLength;
+	char clearString[MAX_BUF];
+	t_auth_code authCode;
+	int sequenceNum;
+
 	static char result_text[20] = "Result_String";
 
-	printf("[8]::RPC: Server receives request for service\n");
-	// ###MKG pass in label as arg (after pool implementation)
-        blk = find_block_from_label("argp->authorization");  
-	if (blk->state != STATE_PAYMENT_VERIFIED) {
-		blk->state = STATE_WAIT_FOR_PAYMENT;
-		if (cl_wait_for_payment(blk->label) == SUCCESS) {
-			blk->state = STATE_PAYMENT_VERIFIED;
-		}
-		else {
-			blk->state = STATE_PAYMENT_FAILED;
-			strcpy(empty, INVOICE_FAIL_CODE);
-			emptyResult.data = empty; 
-			return &emptyResult;			
-		}
+	printf("\n[8]::RPC: Server receives request for service\n");
+
+	serverKeypair = getRSAKey();
+
+	// Decrypt client's service request
+	getToken(argp->data, TOKEN_ID_ENC_BUNDLE, token);
+	Base64Decode(token, &buf, &encLength);
+	if (RSA_private_decrypt(encLength, buf, clearString,
+                       			serverKeypair, 
+					RSA_PKCS1_OAEP_PADDING) == -1) {
+  		printf("Error decrypting message: FAILED!!!\n");
+		strcpy(empty, SERVICE_FAIL_CODE_DECRYPT);
+		emptyResult.data = empty; 
+		return &emptyResult;	
+	} else {
+		getToken(clearString, SERVICE_TOKEN_ID_ENC_AUTH, token);
+		stringToAuthCode(token, &authCode);
+		getToken(clearString, SERVICE_TOKEN_ID_ENC_PARAM, param); 
+   		printf("Decrypted message from client:\n%s\n", 
+						clearString);
 	}
+
+	getToken(clearString, SERVICE_TOKEN_ID_ENC_LABEL, token);
+        blk = findBlockFromLabel(token);  
+	if (blk == NULL) {
+		printf("Server cannot find the block corresponding "
+					"to client's request\n");
+		strcpy(empty, SERVICE_FAIL_CODE);
+		emptyResult.data = empty; 
+		return &emptyResult;
+	}
+
+	if (blk->state == STATE_WAIT_FOR_PAYMENT) {
+        	error = pthread_create(&threadId, NULL, waitForPayment, 
+						(void *) blk);
+       	 	if (!error)
+            		printf("\nThread creation successful\n");
+		else
+			printf("\nThread creation failed!\n");
+
+		// Pause for waitForPayment() thread (throttles incoming reqs)
+		sleep(1);
+	}
+  
+	if (blk->state != STATE_PAYMENT_VERIFIED) {
+		printf("Client cannot make service requests, "
+					"before payment is verified!\n");
+		strcpy(empty, SERVICE_FAIL_CODE);
+		emptyResult.data = empty; 
+		return &emptyResult;
+	}
+
+	// Verify that the authorization token is valid
+	sequenceNum = (int) (authCode.saltPlusSequenceNumber & 
+				INIT_AUTH_PROPER_MASK_2);
+	printf("PPC sequenceNum = %d\n", sequenceNum);
+	if ((authCode.baseCode != blk->authCode.baseCode) ||
+			(sequenceNum < blk->minSeqAllowed) ||
+			(sequenceNum > blk->maxSeqAllowed)) {
+				printf("Client used invalid authorization "
+						"code or sequence number.\n");
+		strcpy(empty, SERVICE_FAIL_CODE);
+		emptyResult.data = empty; 
+		return &emptyResult;
+	}
+
+	blk->minSeqAllowed = sequenceNum + 1;
+
+	// Service the call  (serviceType, param)
+	// Encrypt the result with SessionKey before sending to the client
 
 	result.data = result_text;
 	printf("[11]::RPC: Server sent result of query: %s\n", result_text);

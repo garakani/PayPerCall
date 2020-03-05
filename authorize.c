@@ -2,7 +2,7 @@
 
 // generate a uint64 pseudo-random number using the 32 bit rand()
 uint64_t
-make_rand_label() {
+makeRandLabel() {
 	static int firstTime = TRUE;
 	int lower, upper;
 	uint64_t r1, r2;
@@ -22,41 +22,50 @@ make_rand_label() {
 
 // Make a new authorization code
 void
-cl_make_authorization_code(t_auth_code *authCode) {
-	uint64_t label = make_rand_label();
+makeAuthorizationCode(t_auth_code *authCode, int sequenceNum) {
+	uint64_t salt;
 	uint64_t mask = INIT_AUTH_MASK;
-	authCode->saltPlusSequenceNumber = label & mask;
-	authCode->baseCode = make_rand_label();
+
+	// Always generate new salt
+	salt = makeRandLabel();
+
+	// Initial authorization code: generate baseCode
+	if (sequenceNum == 0) {
+
+		authCode->baseCode = makeRandLabel();
+	}
+	
+	authCode->saltPlusSequenceNumber = (salt & mask) | 
+					(uint64_t) sequenceNum;
+
 	return;
 }
 
 void
-cl_authorize(t_ctl_block *blk) {
-	uint64_t label = make_rand_label();
+authorize(t_ctl_block *blk) {
+	uint64_t label = makeRandLabel();
 	uint64_t mask = INIT_AUTH_MASK;
-
-	blk->is_authorized = TRUE;
+	blk->isAuthorized = TRUE;
 	blk->state = STATE_AUTHORIZED;
 	return;
 }
 
 void
-cl_deauthorize(t_ctl_block *blk) {
-	blk->is_authorized = FALSE;
+deauthorize(t_ctl_block *blk) {
+	blk->isAuthorized = FALSE;
 	blk->state = STATE_IDLE;
 	(blk->authCode).saltPlusSequenceNumber = 0;
 	(blk->authCode).baseCode = 0;
 	strcpy(blk->statusSessionKeyClientPublicKeyBolt11, "");
-	// ### put the block in the pool to be deallocated
 }
 
 bool_t
-cl_is_authorized(t_ctl_block *blk) {
-	return blk->is_authorized;
+isAuthorized(t_ctl_block *blk) {
+	return blk->isAuthorized;
 }
 
 char *
-cl_auth_code_to_string(t_auth_code *authCode, char *out) {
+authCodeToString(t_auth_code *authCode, char *out) {
 	int i;
 	char s1[MAX_TOKEN], s2[MAX_TOKEN];
 
@@ -82,7 +91,7 @@ cl_auth_code_to_string(t_auth_code *authCode, char *out) {
 }
 
 void
-cl_string_to_auth_code(char *hexString, t_auth_code *authCode) {
+stringToAuthCode(char *hexString, t_auth_code *authCode) {
 	char s[MAX_LINE];
 	strcpy(s, hexString);
 
@@ -94,31 +103,39 @@ cl_string_to_auth_code(char *hexString, t_auth_code *authCode) {
 }
 
 char *
-cl_session_key_to_string(uint64_t sessionKey, char *out) {
+sessionKeyToString(uint64_t sessionKey, char *out) {
 	sprintf(out, "%lx", sessionKey);
 	return out;
 }
 
 uint64_t
-cl_string_to_session_key(char *hexString) {
+stringToSessionKey(char *hexString) {
 	uint64_t sessionKey;
 	sessionKey = strtol(hexString, NULL, 16);
 	return sessionKey;
 }
 
 uint64_t
-cl_string_to_label(char *hexString) {
+stringToLabel(char *hexString) {
 	uint64_t label;
-	label = strtol(hexString, NULL, 16);
+	label = strtol(hexString, NULL, 10);
 	return label;
 }
 
+
+char *
+labelToString(uint64_t label, char *out) {
+	if (sprintf(out, "%ld", label) > 0)
+		return out;
+	else
+		return NULL; 
+}
 
 // A validly formatted auth code from client must have 
 // sequence number initially equal to zero, but randomized 
 // value in salt
 bool_t
-cl_is_client_auth_code_proper_format(t_auth_code *authCode) {
+isClientAuthCodeProperFormat(t_auth_code *authCode) {
 	return (authCode->saltPlusSequenceNumber &
 		INIT_AUTH_PROPER_MASK_1) &&
 		!(authCode->saltPlusSequenceNumber & 

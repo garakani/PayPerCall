@@ -12,6 +12,6 @@ struct t_pair {
 program REQ_PROG{
 	version REQ_VERS{
                 t_string req_receipt(t_string)=1;
-		t_string req(t_pair)=2;
+		t_string req(t_string)=2;
 	}=1;
 }=0x23451111;

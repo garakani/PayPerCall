@@ -21,7 +21,7 @@ req_prog_1(struct svc_req *rqstp, register SVCXPRT *transp)
 {
 	union {
 		t_string req_receipt_1_arg;
-		t_pair req_1_arg;
+		t_string req_1_arg;
 	} argument;
 	char *result;
 	xdrproc_t _xdr_argument, _xdr_result;
@@ -39,7 +39,7 @@ req_prog_1(struct svc_req *rqstp, register SVCXPRT *transp)
 		break;
 
 	case req:
-		_xdr_argument = (xdrproc_t) xdr_t_pair;
+		_xdr_argument = (xdrproc_t) xdr_t_string;
 		_xdr_result = (xdrproc_t) xdr_t_string;
 		local = (char *(*)(char *, struct svc_req *)) req_1_svc;
 		break;

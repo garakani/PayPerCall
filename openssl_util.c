@@ -228,19 +228,6 @@ RSA *getRSAKey() {
 	return serverKeypair;
 }
 
-
-char *
-cl_RSA_encrypt(char *in, char *out, char *pemKey) {
-	strcpy(out, in);  // ###MKG fix this later
-	return out;
-}
-
-char *
-cl_RSA_decrypt(char *in, char *out, RSA *keypair) {
-	strcpy(out, in);  // ###MKG fix this later
-	return out;
-}
-
 int
 isQuantityValid(char *quantity) {
 	int q = atoi(quantity);

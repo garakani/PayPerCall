@@ -25,13 +25,13 @@ req_receipt_1(t_string *argp, CLIENT *clnt)
 }
 
 t_string *
-req_1(t_pair *argp, CLIENT *clnt)
+req_1(t_string *argp, CLIENT *clnt)
 {
 	static t_string clnt_res;
 
 	memset((char *)&clnt_res, 0, sizeof(clnt_res));
 	if (clnt_call (clnt, req,
-		(xdrproc_t) xdr_t_pair, (caddr_t) argp,
+		(xdrproc_t) xdr_t_string, (caddr_t) argp,
 		(xdrproc_t) xdr_t_string, (caddr_t) &clnt_res,
 		TIMEOUT) != RPC_SUCCESS) {
 		return (NULL);

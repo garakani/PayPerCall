@@ -7,6 +7,7 @@
 #include <time.h>
 #include <jansson.h>
 #include <sys/stat.h>
+#include <pthread.h>
 #include <openssl/rsa.h>
 #include "openssl_common.h"
 #include "req.h"
@@ -31,6 +32,8 @@
 #define INVOICE_FAIL_CODE_INVALID_SERVICE_REQ "4"
 #define INVOICE_FAIL_CODE_QUANTITY  "5"
 #define INVOICE_FAIL_CODE_AUTH  "6"
+#define SERVICE_FAIL_CODE  "FAILED"
+#define SERVICE_FAIL_CODE_DECRYPT  "FAILED to DECRYPT"
 #define TOKEN_ID_SERVICE_TYPE 1
 #define TOKEN_ID_QUANTITY 2
 #define TOKEN_ID_AUTH_CODE 3
@@ -45,6 +48,9 @@
 #define TOKEN_RETURN_ID_ENC_BUNDLE 1
 #define TOKEN_RETURN_ID_ENC_PUBLIC_KEY 2
 #define TOKEN_RETURN_ID_ENC_SIGNATURE 3
+#define SERVICE_TOKEN_ID_ENC_AUTH 1
+#define SERVICE_TOKEN_ID_ENC_LABEL 2
+#define SERVICE_TOKEN_ID_ENC_PARAM 3
 #define INIT_AUTH_MASK 0xFFFFFFFF00000000
 #define INIT_AUTH_PROPER_MASK_1 0xFFFFFFFF00000000
 #define INIT_AUTH_PROPER_MASK_2 0x00000000FFFFFFFF 
@@ -65,12 +71,16 @@ struct t_auth_code {
 typedef struct t_auth_code t_auth_code;
 
 struct t_ctl_block {
-	int is_authorized;
+	int isAuthorized;
 	int state;
+// service
+// quanty
 	char invoice[MAX_LINE];
 	t_auth_code authCode;
 	uint64_t sessionKey;
 	uint64_t label;
+	int minSeqAllowed;
+	int maxSeqAllowed;
 	char clientPublicKey[MAX_LINE];
 	char bolt11[MAX_LINE];
 	char statusSessionKeyClientPublicKeyBolt11[MAX_BUF];
@@ -79,37 +89,52 @@ struct t_ctl_block {
 };
 typedef struct t_ctl_block t_ctl_block;
 
+struct t_link_list_element {
+	t_ctl_block *element;
+	uint64_t label;
+	struct t_link_list_element *next;
+};
+
+struct info_t {
+	CLIENT *clnt;
+	t_auth_code *authCode;	
+	RSA *clientKeypair;
+	uint64_t label;
+	uint64_t sessionKey;
+	RSA *serverKey;
+	uint32_t sequenceNum;
+};
+typedef struct info_t info_t;
 
 /* prototypes */ 
 void addToken(char *, char *);
 char *getToken(char *, int, char *);
-char *cl_make_invoice(t_ctl_block *, int, char *);
-int cl_pay_invoice(char *, char *);
-int cl_wait_for_payment(uint64_t);
-t_ctl_block *find_block_from_label(char *);
-t_ctl_block *cache_add_blk();
-int exec_command(char *, char *);
-uint64_t make_rand_label();
-void cl_make_authorization_code(t_auth_code *);
-void cl_authorize(t_ctl_block *);
-void cl_deauthorize(t_ctl_block *);
-bool_t cl_is_authorized(t_ctl_block *);
-char *cl_auth_code_to_string(t_auth_code *, char *);
-void cl_string_to_auth_code(char *, t_auth_code *);
-bool_t cl_is_client_auth_code_proper_format(t_auth_code *);
-char *cl_label_to_string(uint64_t, char *);
-char *cl_session_key_to_string(uint64_t, char *);
-uint64_t cl_string_to_session_key(char *);
-uint64_t cl_string_to_label(char *);
-char *cl_RSA_encrypt(char *in, char *out, char *pemPublicKey);
-char *cl_RSA_decrypt(char *in, char *out, RSA *keypair);
+char *makeInvoice(t_ctl_block *, int, char *);
+char *getInvoice(t_ctl_block *, int, char *);
+int payInvoice(char *, char *);
+void *waitForPayment(void *);
+t_ctl_block *findBlockFromLabel(char *);
+t_ctl_block *cacheAddBlk(uint64_t);
+int execCommand(char *, char *);
+uint64_t makeRandLabel();
+void makeAuthorizationCode(t_auth_code *, int);
+void authorize(t_ctl_block *);
+void deauthorize(t_ctl_block *);
+bool_t isAuthorized(t_ctl_block *);
+char *authCodeToString(t_auth_code *, char *);
+void stringToAuthCode(char *, t_auth_code *);
+bool_t isClientAuthCodeProperFormat(t_auth_code *);
+char *labelToString(uint64_t, char *);
+char *sessionKeyToString(uint64_t, char *);
+uint64_t stringToSessionKey(char *);
+uint64_t stringToLabel(char *);
 void genRSAKeyPair(RSA *);
 void rsaToPemPrivateKeyString(RSA *, char *);
 void rsaToPemPublicKeyString(RSA *, char *);
 void pemPublicKeyStringToRsa(RSA *, char *);
 void pemPublicKeyinFileToRsa(RSA *, char *);
 void rsaToPemPublicKeyInFile(RSA *, char *);
-void Base64Encode( const unsigned char*, size_t, char**);
+void Base64Encode(const unsigned char*, size_t, char**);
 void Base64Decode(const char*, unsigned char**, size_t*);
 char* RSASignBase64(RSA *, const unsigned char *, size_t);
 _Bool verifySignature(RSA *, char *, size_t, char *);

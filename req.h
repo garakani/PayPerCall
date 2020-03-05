@@ -35,8 +35,8 @@ typedef struct t_pair t_pair;
 extern  t_string * req_receipt_1(t_string *, CLIENT *);
 extern  t_string * req_receipt_1_svc(t_string *, struct svc_req *);
 #define req 2
-extern  t_string * req_1(t_pair *, CLIENT *);
-extern  t_string * req_1_svc(t_pair *, struct svc_req *);
+extern  t_string * req_1(t_string *, CLIENT *);
+extern  t_string * req_1_svc(t_string *, struct svc_req *);
 extern int req_prog_1_freeresult (SVCXPRT *, xdrproc_t, caddr_t);
 
 #else /* K&R C */

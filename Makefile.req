@@ -21,7 +21,7 @@ OBJECTS_SVC = $(SOURCES_SVC.c:%.c=%.o) $(TARGETS_SVC.c:%.c=%.o)
 # Compiler flags 
 
 CFLAGS += -g -I/usr/local/ssl/include
-LDLIBS += -lnsl -ljansson -lm -lcrypto -lssl
+LDLIBS += -lnsl -ljansson -lm -lcrypto -lssl -lpthread
 RPCGENFLAGS = 
 
 # Targets 
