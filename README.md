@@ -22,10 +22,11 @@ On server machine, go to directory containing "reqServer" executable and type:
     
 On client machine, go to the directory containing "reqClient" executable and type:
 >    ./reqClient ipaddr service quantity
-Where
-> ipaddr is the IP address of the server machine
-> service is a string identifying the service requested (e.g., "quotes" for stock quotes)
-> quantity> is an integer specifying the quantity of the service requested (i.e., number of RPC calls that are being requested and paid for by the client machine)
+
+Where:
+ipaddr: IP address of the server machine
+service: a string identifying the service requested (e.g., "quotes" for stock quotes)
+quantity: an integer specifying the quantity of the service requested (i.e., number of RPC calls that are being requested and paid for by the client machine)
 
 Example: ./reqClient 192.168.3.35 quotes 4
 
