@@ -62,3 +62,6 @@ To regenerate a new server RSA key pairs at any other time:
 - bring up the server.
 - Make any client service request. The client would make this request using an invalid public key for the server. Client request would be rejected by the server, but nonetheless result in server to generate a new keypair, which stores it in "key.pri" and "server_pub.pem" in server's ".PPC" subdirectory.
 - Distribute the new "server_pub.pem" file to the client machine's ".PPC" subdirectory.
+
+# Multi-threaded Cache
+Server is multi-threaded and supports multiple simultaneous clients. All client records are maintained in a cache in memory and are not deleted after service request is completed. In a production environment, service records for in-progress and completed service requests must be maintained in a database to protect against server crashes, and service records that are completed should be deleted from the in-memory cache to optimize memory usage.
