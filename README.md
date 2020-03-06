@@ -57,7 +57,8 @@ The first time the server comes up, it does not yet have a public/private key pa
 - Distribute the "server_pub.pem" file to the client machine's ".PPC" subdirectory, so subsequent client requests can use the correct server public key.
 
 To regenerate a new server RSA key pairs at any other time:
-- bring down server (e.g., ^C),
+- bring down the server (e.g., ^C).
 - delete "key.pri" file from the ".ppc" directory on server.
+- bring up the server.
 - Make any client service request. The client would make this request using an invalid public key for the server. Client request would be rejected by the server, but nonetheless result in server to generate a new keypair, which stores it in "key.pri" and "server_pub.pem" in server's ".PPC" subdirectory.
 - Distribute the new "server_pub.pem" file to the client machine's ".PPC" subdirectory.
