@@ -21,13 +21,13 @@ On server machine, go to directory containing "reqServer" executable and type:
 >    ./reqServer
     
 On client machine, go to the directory containing "reqClient" executable and type:
->    ./reqClient <ipaddr> <service> <quantity>
-Where:
-> <ipaddr> is the IP address of the server machine
-<service> is a string identifying the service requested (e.g., "quotes" for stock quotes)
-<quantity> is an integer specifying the quantity of the service requested (i.e., number of RPC calls that are being requested and paid for by the client machine)
+>    ./reqClient ipaddr service quantity
+Where
+> ipaddr is the IP address of the server machine
+> service is a string identifying the service requested (e.g., "quotes" for stock quotes)
+> quantity> is an integer specifying the quantity of the service requested (i.e., number of RPC calls that are being requested and paid for by the client machine)
+
 Example: ./reqClient 192.168.3.35 quotes 4
-    ./
 
 # Secure Communications Using OpenSSL
 Client-server communications to request service and exchange payment info and security parameters are secured using OpenSSL (encryption and authentication and signature using RSA public key algorithm with 4096-bit keys).
@@ -38,7 +38,7 @@ Furthermore, the payload of RPC service response can optionally be protected thr
 
 To make sure RPC requests to services come from authorized clients that have paid for these services, the client generates an initial "Authorization" token and communicates this to the server encrypted by the server's public key. The Authorization token is used by the client machine to generate a set of one time Authorization codes on each subsequent RPC service calls; the one time Authorization codes are verified by the server to make sure the received client requests originate from the authorised client machine that paid for the requested services. The one time Authorization codes are derived from the initial Authorization token and additionally include a sequence number and a random salt.
 
-# RSA Public Key
+# RSA Keys
 
 The client generates a new pair of public/private RSA keys, every time the client is invoked. The client is identified through its public RSA key. The client's private/public key pair is stored in memory on client machine. The client's public key is communicated to the server during initial PPC setup exchange.
 
